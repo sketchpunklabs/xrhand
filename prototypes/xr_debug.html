@@ -1,0 +1,72 @@
+<!DOCTYPE html><html><head><title></title></head><body><script src="/import-map.js"></script><script type="module">
+// #region IMPORTS
+import Starter, { THREE }   from '../lib/Starter.js';
+import { vec3 }             from 'gl-matrix';
+
+import XRManager            from '../lib/xr/XRManager.js';
+import XRInputManager       from '../lib/xr/XRInputManager.js';
+// #endregion
+
+// #region MAIN
+let App;
+let Debug = {};
+let Ref   = {};
+
+window.addEventListener( "load", _=>{
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App = new Starter( { webgl2:true, grid:true, xr:true } );
+    App.setCamera( 0, 20, 6 );
+    App.onRender = onRender;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Ref.xr = new XRManager( App.renderer, App.camera );
+    Ref.xr.on( 'newHand', onNewHand );
+
+    Ref.ipm  = new XRInputManager( Ref.xr );
+
+    document.querySelector( '#xrBtn' ).addEventListener( 'click', ()=>{
+        Ref.xr.requestSession();
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.startXRRender();
+});
+
+function onRender( dt, et, frame, time ){
+    if( frame && Ref.xr.onRender( frame, time ) ){
+        Ref.ipm.update(); // Update all XR Input States
+    }
+}
+
+// #endregion
+
+// #region LOREM
+function onNewHand( e ){
+    const ctrl    = e.detail;
+    ctrl.onUpdate = cbHandUpdate;
+
+    const ary = [];
+    ctrl.customData = { meshes : ary };
+
+    for( let i=0; i < ctrl.jointCount; i++ ){
+        const m = new THREE.AxesHelper( 0.02 );
+        ary.push( m );
+        App.add( m );
+    }
+}
+
+function cbHandUpdate( ctrl ){
+    const meshes = ctrl.customData.meshes;
+
+    for( let i=0; i < ctrl.jointCount; i++ ){
+        const m = meshes[ i ];
+        const j = ctrl.joints[ i ];
+        m.position.fromArray( j.pos );
+        m.quaternion.fromArray( j.rot );
+    }
+}
+// #endregion
+
+</script>
+<button id="xrBtn" style="position:fixed; left: 10px; top:10px;">RequestSession</button>
+</body></html>

@@ -1,0 +1,242 @@
+<!DOCTYPE html><html><head><title></title></head><body><script src="/import-map.js"></script><script type="module">
+// #region IMPORTS
+import Starter, { THREE }   from '../lib/Starter.js';
+import { UtilGltf2, Gltf2 } from '../lib/loaders/UtilGltf2.js';
+import { vec3, quat }       from 'gl-matrix';
+
+import XRManager            from '../lib/xr/XRManager.js';
+import XRInputManager       from '../lib/xr/XRInputManager.js';
+// #endregion
+
+// #region MAIN
+let App;
+let Debug = {};
+let Ref   = {};
+
+window.addEventListener( "load", async _=>{
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App = new Starter( { webgl2:true, grid:true, xr:true } );
+    App.setCamera( -45, 60, 0.3 );
+    App.onRender = onRender;
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const texBody = new THREE.TextureLoader().load( '../assets/rivot/ROBOT_ARM_HAND_BaseColor.jpg' );
+    texBody.flipY = false;
+
+    const texFing = new THREE.TextureLoader().load( '../assets/rivot/ROBOT_ARM_FINGERS_BaseColor.jpg' );
+    texFing.flipY = false;
+
+    const gltf    = await Gltf2.fetch( '../assets/rivot/rivot_hand_r.gltf' );
+    const skel    = UtilGltf2.getSkeleton( gltf );
+    const grp     = UtilGltf2.getSkinnedMesh( gltf, null, skel, null );
+
+    const matBody = new THREE.MeshPhongMaterial( { map:texBody } );
+    const matFing = new THREE.MeshPhongMaterial( { map:texFing } );
+
+    grp.children[ 0 ].material = matBody;
+    grp.children[ 1 ].material = matFing;
+    grp.children[ 2 ].material = matBody;
+
+    App.add( grp );
+    Ref.rig = new HandRig( grp );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Ref.xr = new XRManager( App.renderer, App.camera );
+    Ref.xr.on( 'newHand', onNewHand );
+
+    Ref.ipm  = new XRInputManager( Ref.xr );
+
+    document.querySelector( '#xrBtn' ).addEventListener( 'click', ()=>{
+        Ref.xr.requestSession();
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.startXRRender();
+});
+
+function onRender( dt, et, frame, time ){
+    if( frame && Ref.xr.onRender( frame, time ) ){
+        Ref.ipm.update(); // Update all XR Input States
+    }
+}
+
+// #endregion
+
+// #region LOREM
+function onNewHand( e ){
+    const ctrl    = e.detail;
+    if( ctrl.side !== 'right' ) return;
+
+    ctrl.onUpdate   = cbHandUpdate;
+    ctrl.customData = { rig : Ref.rig };
+}
+
+function cbHandUpdate( ctrl ){
+    const rig = ctrl.customData.rig;
+    rig.update( ctrl );
+}
+// #endregion
+
+
+class Chain{
+    constructor( ary ){
+        this.bones = [];
+        for( let i of ary ){
+            this.bones.push({
+                ref : i,
+                rot : i.quaternion.toArray(),
+            });
+        }
+    }
+
+    resetRotation(){
+        for( let b of this.bones ){
+            b.ref.quaternion.fromArray( b.rot );
+        }
+    }
+
+    update( xrChain ){
+        const v       = new THREE.Vector3();
+        const q       = new THREE.Quaternion();
+        const bindDir = [0,0,0];
+        const xrDir   = [0,0,0];
+        const bend    = [0,0,0,1];
+        const pInv    = [0,0,0,1];
+        const wsRot   = [0,0,0,1];
+        let wsbRot;
+        let wsbPos;
+        let prot
+        let b;
+
+        // let b = this.bones[ 0 ].ref.parent;
+        // b.updateWorldMatrix( false, false ); // parents / children
+        // b.getWorldQuaternion( q );
+        
+        // let prot = q.toArray();
+
+        // Debug.pnt.reset();
+        // Debug.ln.reset();
+
+
+        for( let i=0; i < this.bones.length; i++ ){
+            b = this.bones[ i ].ref.parent;
+            b.updateWorldMatrix( true, true ); // parents / children
+            b.getWorldQuaternion( q );
+            prot = q.toArray();
+
+            b = this.bones[ i ].ref;
+            //b.updateWorldMatrix( true, true );
+            b.getWorldPosition( v );
+            b.getWorldQuaternion( q );
+            wsbRot = q.toArray();
+            wsbPos = v.toArray();
+            
+            // if( i==1 ){
+                // Debug.pnt.add( wsbPos, 0xff0000, 1.5 );
+            // }
+
+            // -----------------------------
+            // Swing
+            vec3.transformQuat( bindDir, [0,1, 0], wsbRot );
+            vec3.transformQuat( xrDir,   [0,0,-1], xrChain[ i ].rot );
+
+            // if( i==1 ) {
+                // Debug.ln.add( wsbPos, vec3.add( [0,0,0], wsbPos, bindDir ), 0xff0000 );
+                // Debug.ln.add( wsbPos, vec3.add( [0,0,0], wsbPos, xrDir ), 0xff0000 );
+            // }
+
+            quat.rotationTo( bend, bindDir, xrDir );
+            quat.mul( wsRot, bend, wsbRot );
+            
+            // -----------------------------
+            // Twist
+            vec3.transformQuat( bindDir, [0,0,1], wsRot );
+            vec3.transformQuat( xrDir,   [0,1,0], xrChain[ i ].rot );
+
+            // if( i==1 ) {
+                // Debug.ln.add( wsbPos, vec3.add( [0,0,0], wsbPos, bindDir ), 0x00ffff );
+                // Debug.ln.add( wsbPos, vec3.add( [0,0,0], wsbPos, xrDir ), 0xffff00 );
+            // }
+
+            quat.rotationTo( bend, bindDir, xrDir );
+            quat.mul( wsRot, bend, wsRot );
+
+            // -----------------------------
+            // To Local Space
+            quat.invert( pInv, prot );
+            quat.mul( wsRot, pInv, wsRot );
+            b.quaternion.fromArray( wsRot );
+
+            //break;
+        }
+
+        // Debug.pnt._updateGeometry();
+        // Debug.ln._updateGeometry();
+    }
+}
+
+class HandRig{
+    constructor( root, scl=0.06 ){
+        this.root = root;
+        this.skel = root.children[0].skeleton;
+        this.root.scale.set( scl, scl, scl );
+
+        const bones    = this.skel.bones;
+        this.finThumb  = new Chain( [ bones[22], bones[23], bones[24] ] );
+        this.finIndex  = new Chain( [ bones[3],  bones[4],  bones[5] ]  );
+        this.finMiddle = new Chain( [ bones[8],  bones[9],  bones[10] ] );
+        this.finRing   = new Chain( [ bones[13], bones[14], bones[15] ] );
+        this.finPinky  = new Chain( [ bones[18], bones[19], bones[20] ] );
+
+        // Manually Play with the bones
+        // const skel = this.skel;
+        // skel.bones[ 3 ].rotation.x += -Math.PI * 0.15;
+        // skel.bones[ 4 ].rotation.x += -Math.PI * 0.15;
+        // skel.bones[ 5 ].rotation.x += -Math.PI * 0.15;
+
+        // skel.bones[ 8 ].rotation.x += -Math.PI * 0.35;
+        // skel.bones[ 9 ].rotation.x += -Math.PI * 0.35;
+        // skel.bones[ 10 ].rotation.x += -Math.PI * 0.35;
+
+        // skel.bones[ 13 ].rotation.x += -Math.PI * 0.35;
+        // skel.bones[ 14 ].rotation.x += -Math.PI * 0.35;
+        // skel.bones[ 15 ].rotation.x += -Math.PI * 0.35;
+
+        // skel.bones[ 18 ].rotation.x += -Math.PI * 0.35;
+        // skel.bones[ 19 ].rotation.x += -Math.PI * 0.35;
+        // skel.bones[ 20 ].rotation.x += -Math.PI * 0.35;
+
+        // skel.bones[ 22 ].rotation.x += -Math.PI * 0.35;
+        // skel.bones[ 23 ].rotation.x += -Math.PI * 0.35;
+        // skel.bones[ 24 ].rotation.x += -Math.PI * 0.35;
+        // console.log( skel );
+    }
+
+    update( ctrl ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Update Main Model first
+        // Using the Grip transform seems to do a good job of placing the handle model
+        // in XR Room space, since the joint data exists in "Joint Space".
+        // NOTE: This can be an issue since the Wrist Bone Data isn't being used
+        this.root.position.fromArray( ctrl.gripPos );
+        this.root.quaternion.fromArray( ctrl.gripRot );
+
+        // reset bones to bind rotation.
+        this.finThumb.resetRotation();
+        this.finIndex.resetRotation();
+        this.finMiddle.resetRotation();
+        this.finRing.resetRotation();
+        this.finPinky.resetRotation();
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.finThumb.update( ctrl.finThumb );
+        this.finIndex.update( ctrl.finIndex );
+        this.finMiddle.update( ctrl.finMiddle );
+        this.finRing.update( ctrl.finRing );
+        this.finPinky.update( ctrl.finPinky );
+    }
+}
+
+</script>
+<button id="xrBtn" style="position:fixed; left: 10px; top:10px;">RequestSession</button>
+</body></html>

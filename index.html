@@ -1,0 +1,56 @@
+<!DOCTYPE html><html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GamePhysics</title>
+    <style>
+        *{ font-family: monospace; font-size:16px; }
+        body{ display:flex; flex-direction:column; align-items:center; }
+        div{ width:75vw; }
+        hr{ border-top:2px dotted gray; height:0px; }
+        h1{ font-size:20px; }
+    </style>
+</head>
+<body>
+
+<div>
+    <h1>XR Hand</h1>
+
+    <span style="width:200px; float:right; padding-left:10px;">
+        <img src="imgs/first_hand.png" width="200px">
+        <img src="imgs/rivot.png" width="200px" >
+        <img src="imgs/debug.png" width="200px" >
+    </span>
+
+    <p>
+        With the metaverse coming at us, I wanted to play around with how to do hand interactions in VR. Using WebXR API and Oculus Quest 2 for its hand
+        tracking capibility, this gives me the opertunity to give it a go using web technologies while rendering the results with THREE.js.
+    </p>
+
+    <p>
+        As an added bonus, I wrote most of the XR funtionality from scratch with only the actual VR rendering being done by 3js. This means getting and setting up
+        the xr session, plus polling the api for controller and hand data to be stored in an easy to get data structures.
+    </p>
+
+    <p>
+        <b>Source Code</b> : <a href="https://github.com/sketchpunklabs/xrhand">https://github.com/sketchpunklabs/xrhand</a>
+    </p>
+
+    <hr>
+
+    <b>Prototypes</b>
+    <ol>
+        <li><a href="prototypes/xr_debug.html">XR Data Debugging : Joints rendered with a THREE.AxesHelper</a></li>
+        <li><a href="prototypes/first_hand.html">Oculus's First Hand Model</a></li>
+        <li><a href="prototypes/rivot_hand.html">Rachet & Clank : Rivot's Hand </a></li>
+    </ol>
+
+    <b>Resources</b>
+    <ol>
+        <!--<li><a href=""></a></li>-->
+        <li><a href="https://github.com/oculus-samples/Unity-FirstHand">Oculus unity sample : FirstHand</a></li>
+    </ol>
+</div>
+
+</body>
+</html> 
